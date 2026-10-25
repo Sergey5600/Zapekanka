@@ -9,6 +9,7 @@ that are still needed by pending outputs are kept in memory.
 
 import json
 import os
+import sys
 import time
 import zlib
 
@@ -88,6 +89,53 @@ def tile_plan(width, height, ss, max_tile):
     return count(width), count(height)
 
 
+# Peak memory of one baked texel in Blender + Cycles + this engine, measured on
+# an 800k triangle bake (BakePixel arrays for low and high, differentials,
+# render buffers, float image, numpy copies), with some headroom.
+BYTES_PER_TILE_TEXEL = 256
+
+
+def available_memory():
+    """Free physical memory in bytes, or None when it cannot be determined."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
+                            ("total_phys", ctypes.c_ulonglong), ("avail_phys", ctypes.c_ulonglong),
+                            ("total_page", ctypes.c_ulonglong), ("avail_page", ctypes.c_ulonglong),
+                            ("total_virtual", ctypes.c_ulonglong), ("avail_virtual", ctypes.c_ulonglong),
+                            ("avail_extended", ctypes.c_ulonglong)]
+
+            status = MemoryStatus()
+            status.length = ctypes.sizeof(MemoryStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.avail_phys)
+            return None
+        if os.path.exists("/proc/meminfo"):
+            with open("/proc/meminfo") as fh:
+                for line in fh:
+                    if line.startswith("MemAvailable:"):
+                        return int(line.split()[1]) * 1024
+            return None
+        pages = os.sysconf("SC_AVPHYS_PAGES")
+        return int(pages * os.sysconf("SC_PAGE_SIZE"))
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def memory_tile_limit(free_bytes, floor=1024, ceiling=16384):
+    """Largest power-of-two tile side whose bake fits into half of the free memory."""
+    if not free_bytes:
+        return ceiling
+    texels = 0.5 * free_bytes / BYTES_PER_TILE_TEXEL
+    side = floor
+    while side * 2 <= ceiling and (side * 2) ** 2 <= texels:
+        side *= 2
+    return side
+
+
 def configure_cycles_device(settings, log=print):
     """Worker only: enable the GPU devices chosen in the UI session."""
     if settings.get("device") != "GPU":
@@ -162,7 +210,12 @@ class Engine:
             plans = {}
             ss = self.settings["supersample"]
             w, h = self.settings["resolution"]
-            nx, ny = tile_plan(w, h, ss, int(self.settings.get("max_tile", 8192)))
+            max_tile = int(self.settings.get("max_tile", 8192))
+            limit = memory_tile_limit(available_memory())
+            if limit < max_tile:
+                self.log("Free memory limits bake tiles to %dx%d" % (limit, limit))
+                max_tile = limit
+            nx, ny = tile_plan(w, h, ss, max_tile)
             for ts in self.job["texture_sets"]:
                 highs = self.session.highs[ts["name"]]
                 mats = [m for hd in highs for m in hd.effective_materials if m is not None]

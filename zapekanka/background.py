@@ -164,9 +164,7 @@ def _start_next():
         kwargs["creationflags"] = flags
     elif low_priority:
         kwargs["preexec_fn"] = lambda: os.nice(5)
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    env["PYTHONUNBUFFERED"] = "1"
+    env = worker_env(job_dir)
     try:
         process = subprocess.Popen(
             cmd,
@@ -193,6 +191,45 @@ def _start_next():
     STATE.job_dir = job_dir
     STATE.log.clear()
     STATE.last_error = ""
+
+
+def worker_env(job_dir):
+    """Environment of the worker process.
+
+    The worker starts with factory settings, so no extension is enabled in it.
+    Blender then "cleans up" the shared extension wheel folder
+    (``extensions/.local``) and removes the libraries of the user's
+    extensions.  A private, empty extensions directory prevents that.
+    """
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    env["PYTHONUNBUFFERED"] = "1"
+    env["BLENDER_USER_EXTENSIONS"] = os.path.join(job_dir, "extensions")
+    return env
+
+
+_OUT_OF_MEMORY_MARKERS = ("returns null", "out of memory", "memoryerror", "bad_alloc", "cannot allocate")
+_EXIT_CODES = {
+    0xC0000005: "memory access violation",
+    0xC0000017: "out of memory",
+    0xC00000FD: "stack overflow",
+    0xC0000409: "fatal error",
+    0xC000001D: "illegal instruction",
+}
+
+
+def crash_message(returncode, log_lines):
+    """Explain why the worker died, in words."""
+    text = "\n".join(log_lines).lower()
+    if any(marker in text for marker in _OUT_OF_MEMORY_MARKERS) or returncode == -9:
+        return ("Blender ran out of memory while baking. Lower the resolution or supersampling, "
+                "or set a smaller Max Tile Size in the add-on preferences")
+    code = returncode & 0xFFFFFFFF if returncode is not None else None
+    if code in _EXIT_CODES:
+        return "The bake process crashed (%s). See Open Log for details" % _EXIT_CODES[code]
+    if returncode is not None and returncode < 0:
+        return "The bake process was stopped by the system (signal %d). See Open Log" % -returncode
+    return "The bake process stopped unexpectedly (exit code %s). See Open Log" % returncode
 
 
 def _ensure_timer():
@@ -236,7 +273,7 @@ def _finish(eof_seen):
             result = None
     if result is None:
         tail = "\n".join(list(STATE.log)[-15:])
-        msg = "Cancelled" if job.cancelled else "Worker exited with code %s" % job.process.returncode
+        msg = "Cancelled" if job.cancelled else crash_message(job.process.returncode, list(STATE.log))
         result = {"ok": False, "errors": [msg], "warnings": [], "texture_sets": [], "log_tail": tail}
     if job.cancelled:
         result["ok"] = False
