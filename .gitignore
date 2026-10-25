@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.blend1
+/dist/
+/.venv*/
+/test-output/
