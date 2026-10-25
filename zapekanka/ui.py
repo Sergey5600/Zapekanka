@@ -161,9 +161,14 @@ class ZB_PT_pairs(_Panel, bpy.types.Panel):
         col.separator()
         col.operator("zapekanka.pairs_clear", text="", icon="X")
 
+        if not s.pairs:
+            box = layout.box()
+            _wrap(box, iface_("Name objects Name_low / Name_high and press Detect Pairs."), icon="INFO")
+            _wrap(box, iface_("Or select a low poly and its high polys (low poly active) and press +."))
+            _wrap(box, iface_("Bake All without pairs bakes the materials of the selected objects."))
+            return
         pair = pairing.active_pair(s)
         if pair is None:
-            layout.label(text="Name objects *_low / *_high and press Detect", icon="INFO")
             return
         box = layout.box()
         box.prop(pair, "texture_set", icon="TEXTURE")

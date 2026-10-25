@@ -225,8 +225,13 @@ class ZB_Settings(bpy.types.PropertyGroup):
     )
     aa_samples: IntProperty(name="Samples", description="Cycles samples for regular passes",
                             default=4, min=1, soft_max=64)
-    device: EnumProperty(name="Device", items=(("CPU", "CPU", ""), ("GPU", "GPU", "Uses the devices enabled in "
-                                                                        "Preferences > System")), default="CPU")
+    device: EnumProperty(
+        name="Device",
+        items=(("SCENE", "Scene Setting", "Use the Cycles device of the scene (Render Properties)"),
+               ("CPU", "CPU", ""),
+               ("GPU", "GPU", "Uses the devices enabled in Preferences > System")),
+        default="SCENE",
+    )
     bake_mode: EnumProperty(
         name="Mode",
         items=(("BACKGROUND", "Background", "Bake in a separate Blender process: the interface stays responsive"),

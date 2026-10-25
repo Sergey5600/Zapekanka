@@ -28,7 +28,14 @@ RU = {
     "Queued: %d": "В очереди: %d",
     "Time: %.1fs": "Время: %.1f с",
     "%s: %d file(s)": "%s: файлов %d",
-    "Name objects *_low / *_high and press Detect": "Назовите объекты *_low / *_high и нажмите «Найти пары»",
+    "Name objects Name_low / Name_high and press Detect Pairs.":
+        "Назовите объекты Имя_low / Имя_high и нажмите «Найти пары».",
+    "Or select a low poly and its high polys (low poly active) and press +.":
+        "Или выделите low и его high (low активный) и нажмите +.",
+    "Bake All without pairs bakes the materials of the selected objects.":
+        "«Запечь всё» без пар запекает материалы выделенных объектов.",
+    "Scene Setting": "Как в сцене",
+    "Use the Cycles device of the scene (Render Properties)": "Устройство Cycles из настроек сцены (Render Properties)",
     "Low": "Low",
     "High": "High",
     "(missing)": "(нет объекта)",

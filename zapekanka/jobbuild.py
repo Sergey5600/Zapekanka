@@ -30,6 +30,13 @@ def _gpu_info(context):
     return cprefs.compute_device_type, devices
 
 
+def _device(context, settings):
+    if settings.device != "SCENE":
+        return settings.device
+    cycles = getattr(context.scene, "cycles", None)
+    return "GPU" if cycles is not None and cycles.device == "GPU" else "CPU"
+
+
 def output_directory(settings):
     raw = settings.output_dir.strip() or "//textures/"
     if raw.startswith("//") and not bpy.data.filepath:
@@ -71,7 +78,7 @@ def build_job(context, pairs=None):
         "supersample": int(s.supersample),
         "max_tile": int(prefs.max_tile) if prefs is not None else 8192,
         "aa_samples": s.aa_samples,
-        "device": s.device,
+        "device": _device(context, s),
         "margin": s.margin,
         "margin_type": s.margin_type,
         "fill_empty": s.fill_empty,
@@ -83,7 +90,7 @@ def build_job(context, pairs=None):
         "skip_empty": s.skip_empty,
         "low_priority": prefs.low_priority if prefs is not None else True,
     })
-    if s.device == "GPU":
+    if st["device"] == "GPU":
         st["gpu_backend"], st["gpu_devices"] = _gpu_info(context)
     m = s.maps
     job["maps"].update({

@@ -170,6 +170,21 @@ def pair_from_selection(context):
     return pair
 
 
+def self_pairs_from_selection(context):
+    """One pair per selected mesh, without high polys: each object bakes its own materials."""
+    s = context.scene.zapekanka
+    objs = [o for o in context.selected_objects if o.type == "MESH" and not is_helper(o)]
+    created = []
+    for obj in sorted(objs, key=lambda o: o.name):
+        pair = s.pairs.add()
+        pair.name = unique_pair_name(s, obj.name)
+        pair.lows.add().obj = obj
+        created.append(pair)
+    if created:
+        s.pairs_index = len(s.pairs) - 1
+    return created
+
+
 def active_pair(settings):
     if 0 <= settings.pairs_index < len(settings.pairs):
         return settings.pairs[settings.pairs_index]
