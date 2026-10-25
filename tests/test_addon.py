@@ -237,6 +237,44 @@ class BakeOperatorTest(AddonTestCase):
         bpy.ops.zapekanka.restore_materials()
         self.assertEqual(low.data.materials[0], original)
 
+    def test_bake_all_without_names_bakes_selection(self):
+        # the reported case: objects are not named *_low / *_high, one object is selected
+        tower = scenes.cube("ElecLaneBig")
+        scenes.unwrap(tower)
+        tower.data.materials.append(scenes.principled("Steel", (0.5, 0.5, 0.55, 1.0), metallic=1.0))
+        scenes.cube("Fence", 2.0, (5, 0, 0))
+        for obj in bpy.context.scene.objects:
+            obj.select_set(obj is tower)
+        bpy.context.view_layer.objects.active = tower
+        self.s.bake_mode = "FOREGROUND"
+        bpy.ops.zapekanka.maps_preset(preset="GAME")
+        self.assertEqual(bpy.ops.zapekanka.bake(scope="ALL"), {"FINISHED"})
+        self.assertEqual([p.name for p in self.s.pairs], ["ElecLaneBig"])
+        self.assertEqual(len(self.s.pairs[0].highs), 0)
+        names = os.listdir(self.s.output_dir)
+        self.assertIn("T_ElecLaneBig_BC.png", names)
+        self.assertIn("T_ElecLaneBig_ORM.png", names)
+
+    def test_nothing_to_bake_explains_what_to_do(self):
+        scenes.cube("ElecLaneBig")
+        for obj in bpy.context.scene.objects:
+            obj.select_set(False)
+        with self.assertRaises(RuntimeError) as ctx:
+            bpy.ops.zapekanka.bake(scope="ALL")
+        self.assertIn("Detect Pairs", str(ctx.exception))
+        self.assertEqual(len(self.s.pairs), 0)
+
+    def test_device_follows_scene(self):
+        from zapekanka import jobbuild
+
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        self.assertEqual(self.s.device, "SCENE")
+        bpy.context.scene.cycles.device = "GPU"
+        self.assertEqual(jobbuild.build_job(bpy.context)["settings"]["device"], "GPU")
+        bpy.context.scene.cycles.device = "CPU"
+        self.assertEqual(jobbuild.build_job(bpy.context)["settings"]["device"], "CPU")
+
     def test_background_bake_with_worker_process(self):
         low, high = scenes.box_pair()
         high.data.materials.append(scenes.principled("Red", (0.8, 0.1, 0.1, 1.0)))

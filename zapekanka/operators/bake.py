@@ -99,11 +99,20 @@ class ZB_OT_bake(bpy.types.Operator):
         s = context.scene.zapekanka
         pairing.prune_missing(s, context.scene)
         if not s.pairs:
-            groups = pairing.detect(context)
-            pairing.store(s, groups)
+            pairing.store(s, pairing.detect(context))
+        if not s.pairs and self.scope != "ACTIVE":
+            # Nothing named *_low / *_high: bake the selection's own materials.
+            created = pairing.self_pairs_from_selection(context)
+            if created:
+                self.report({"INFO"}, "No *_low / *_high objects found: baking the materials of %d selected "
+                                      "object(s). Use + to bake high polys onto a low poly" % len(created))
         pairs = _select_pairs(context, self.scope)
         if not pairs:
-            self.report({"ERROR"}, "No pairs to bake. Detect pairs first")
+            if s.pairs and self.scope == "SELECTED":
+                self.report({"ERROR"}, "The selected objects are not part of any pair")
+            else:
+                self.report({"ERROR"}, "Nothing to bake. Name objects Name_low / Name_high and press Detect Pairs, "
+                                       "or select the objects to bake")
             return {"CANCELLED"}
         if not self.skip_checks:
             issues = preflight.run_checks(context)
