@@ -98,12 +98,15 @@ def main():
 
         engine.configure_cycles_device(job["settings"], log)
 
-        last = [0.0]
+        last = {"time": 0.0, "message": None}
 
         def progress(value, message):
+            # Throttle repeats, but never drop a new message: the start of a
+            # long pass would otherwise show the previous pass until it ends.
             now = time.time()
-            if now - last[0] > 0.2 or value >= 1.0:
-                last[0] = now
+            if message != last["message"] or now - last["time"] > 0.2 or value >= 1.0:
+                last["time"] = now
+                last["message"] = message
                 emit("progress", value=value, message=message)
 
         result = engine.Engine(job, progress=progress, log=log).run()
