@@ -1,0 +1,52 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Blender ${{ matrix.blender }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - blender: "4.2"
+            bpy: "4.2.*"
+            python: "3.11"
+          - blender: "4.5"
+            bpy: "4.5.*"
+            python: "3.11"
+          - blender: "5.2"
+            bpy: "5.2.*"
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System libraries for bpy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxrender1 libxxf86vm1 libxfixes3 libxi6 libxkbcommon0 libsm6 libgl1 libegl1
+      - name: Install bpy
+        run: pip install "bpy==${{ matrix.bpy }}"
+      - name: Run tests
+        run: python tests/run.py
+
+  build:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build extension zip
+        run: python tools/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zapekanka-extension
+          path: dist/*.zip

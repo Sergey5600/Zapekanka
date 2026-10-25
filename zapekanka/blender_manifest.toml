@@ -1,0 +1,27 @@
+schema_version = "1.0.0"
+
+id = "zapekanka"
+version = "1.0.0"
+name = "Zapekanka"
+tagline = "High to low baking with PBR, auto cage, background bakes and engine export"
+maintainer = "Zapekanka contributors"
+type = "add-on"
+
+website = "https://github.com/sergey5600/zapekanka"
+
+tags = ["Bake", "Material", "Import-Export", "Game Engine"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+files = "Read scenes and write baked textures and exports"
+network = "Send assets to a running Unreal Editor (Python remote execution on the local network)"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "*.zip",
+]
