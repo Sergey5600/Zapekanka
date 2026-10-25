@@ -414,6 +414,23 @@ RU = {
     "UV map %s not found on %s, using %s": "UV-развёртка %s не найдена на %s, используется %s",
     "Cage %s does not match the topology of its low poly; using the automatic cage":
         "Каж %s не совпадает по топологии с low; используется автоматический",
+
+    # Presets
+    "Mask Map": "Mask Map",
+    "Metallic Smoothness": "Metallic Smoothness",
+    "ORM": "ORM",
+    "Unreal Engine 5": "Unreal Engine 5",
+    "Unity (URP / Built-in)": "Unity (URP / Built-in)",
+    "Unity (HDRP)": "Unity (HDRP)",
+    "DirectX normals, ORM packing, T_Name_Suffix naming": "Нормали DirectX, упаковка ORM, имена T_Имя_Суффикс",
+    "OpenGL normals, metallic + smoothness in alpha": "Нормали OpenGL, metallic + smoothness в альфе",
+    "OpenGL normals, HDRP mask map": "Нормали OpenGL, mask map для HDRP",
+    "OpenGL normals, ORM packing": "Нормали OpenGL, упаковка ORM",
+    "OpenGL normals, separate maps up to 1024px": "Нормали OpenGL, отдельные карты до 1024 px",
+    "OpenGL normals, glTF occlusion-roughness-metallic packing": "Нормали OpenGL, упаковка glTF occlusion-roughness-metallic",
+    "Mesh maps named for Substance 3D Painter, 16-bit normals": "Карты меша с именами для Substance 3D Painter, 16-бит нормали",
+    "Mesh maps named for Marmoset Toolbag, 16-bit normals": "Карты меша с именами для Marmoset Toolbag, 16-бит нормали",
+    "Keep the current naming and packing settings": "Оставить текущие имена и упаковку",
 }
 
 # Operator buttons that use bl_label are looked up in the "Operator" context.

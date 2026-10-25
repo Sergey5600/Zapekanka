@@ -275,12 +275,31 @@ def read_sidecar(path):
     return data.get("texture_set", ""), files, data.get("normal_format", "OPENGL"), data.get("meta", {})
 
 
+class _SettingsView:
+    """Read-only view of the scene settings with some values overridden."""
+
+    def __init__(self, base, **overrides):
+        self._base = base
+        self._overrides = overrides
+
+    def __getattr__(self, name):
+        if name in self._overrides:
+            return self._overrides[name]
+        return getattr(self._base, name)
+
+
 def guess_files(folder, set_name, settings, extensions=(".png", ".tga", ".tif", ".tiff", ".exr", ".jpg")):
-    """Find textures named with the current naming template and suffixes."""
+    """Find textures named with the current naming template and suffixes.
+
+    Packed and separate variants are both tried, so a texture set baked with
+    other packing settings is still found.
+    """
     from . import presets
 
     enabled = set(MAPS)
-    candidates = presets.build_outputs(settings, enabled)
+    candidates = []
+    for view in (_SettingsView(settings), _SettingsView(settings, pack_mode="NONE", opacity_in_alpha=False)):
+        candidates.extend(presets.build_outputs(view, enabled))
     names = {}
     for entry in os.listdir(folder):
         stem, ext = os.path.splitext(entry)

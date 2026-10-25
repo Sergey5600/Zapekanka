@@ -51,67 +51,17 @@ def _evaluated_mesh(obj, depsgraph):
     return ev, ev.to_mesh()
 
 
-def uv_island_ids(mesh, uv_layer):
-    """Face -> UV island id (faces sharing an edge with identical UVs)."""
-    nf = len(mesh.polygons)
-    nl = len(mesh.loops)
-    if nf == 0:
-        return np.zeros(0, np.int64)
-    uv = np.empty(nl * 2, np.float32)
-    uv_layer.data.foreach_get("uv", uv)
-    uv = np.round(uv.reshape(-1, 2), 5)
-    lv = np.empty(nl, np.int32)
-    mesh.loops.foreach_get("vertex_index", lv)
-    totals = np.empty(nf, np.int32)
-    mesh.polygons.foreach_get("loop_total", totals)
-    face_of_loop = np.repeat(np.arange(nf), totals)
-    # loops with the same vertex and UV connect their faces
-    keys = np.column_stack([lv.astype(np.float64), uv[:, 0], uv[:, 1]])
-    _, group = np.unique(keys, axis=0, return_inverse=True)
-    group = group.reshape(-1)
-    parent = np.arange(nf)
-
-    def find_all(p):
-        while True:
-            pp = p[p]
-            if np.array_equal(pp, p):
-                return p
-            p = pp
-
-    order = np.argsort(group, kind="stable")
-    g_sorted = group[order]
-    f_sorted = face_of_loop[order]
-    same = g_sorted[1:] == g_sorted[:-1]
-    a = f_sorted[1:][same]
-    b = f_sorted[:-1][same]
-    for _ in range(64):
-        pa, pb = parent[a], parent[b]
-        lo = np.minimum(pa, pb)
-        hi = np.maximum(pa, pb)
-        diff = lo != hi
-        if not diff.any():
-            break
-        np.minimum.at(parent, hi[diff], lo[diff])
-        parent = find_all(parent)
-    parent = find_all(parent)
-    _, ids = np.unique(parent, return_inverse=True)
-    return ids.reshape(-1)
-
-
-def rasterize_uv_islands(mesh, uv_layer, island_of_face, res=256):
-    """Return (pixel_index, island_id) pairs for pixel centres covered by triangles."""
+def rasterize_uv(mesh, uv_layer, res=256):
+    """Return (pixel_index, triangle_index) pairs for pixel centres strictly inside UV triangles."""
     mesh.calc_loop_triangles()
     nt = len(mesh.loop_triangles)
     if nt == 0:
         return np.zeros(0, np.int64), np.zeros(0, np.int64)
     tl = np.empty(nt * 3, np.int32)
     mesh.loop_triangles.foreach_get("loops", tl)
-    tp = np.empty(nt, np.int32)
-    mesh.loop_triangles.foreach_get("polygon_index", tp)
     uv = np.empty(len(mesh.loops) * 2, np.float32)
     uv_layer.data.foreach_get("uv", uv)
     tri = uv.reshape(-1, 2)[tl.reshape(-1, 3)].astype(np.float64) * res  # (nt, 3, 2)
-    island = island_of_face[tp]
     mn = np.floor(tri.min(axis=1)).astype(np.int64)
     mx = np.floor(tri.max(axis=1)).astype(np.int64)
     mn = np.clip(mn, 0, res - 1)
@@ -155,16 +105,16 @@ def rasterize_uv_islands(mesh, uv_layer, island_of_face, res=256):
         eps = 1e-6
         inside = ok & (u > eps) & (v > eps) & (u + v < 1.0 - eps)
         pix_list.append((py[inside] * res + px[inside]).astype(np.int64))
-        isl_list.append(island[t[inside]].astype(np.int64))
+        isl_list.append(t[inside].astype(np.int64))
         idx = end
     return np.concatenate(pix_list), np.concatenate(isl_list)
 
 
-def overlap_ratio(pixels, islands):
-    """Fraction of covered pixels claimed by more than one island."""
+def overlap_ratio(pixels, owners):
+    """Fraction of covered pixels claimed by more than one owner (triangle or object)."""
     if len(pixels) == 0:
         return 0.0
-    pairs = np.unique(np.column_stack([pixels, islands]), axis=0)
+    pairs = np.unique(np.column_stack([pixels, owners]), axis=0)
     pix, counts = np.unique(pairs[:, 0], return_counts=True)
     return float((counts > 1).sum()) / float(len(pix))
 
@@ -288,9 +238,9 @@ def _check_low(obj, pair, depsgraph, s):
             layer.data.foreach_get("uv", uv)
             if len(uv) and (uv.min() < -1e-4 or uv.max() > 1.0 + 1e-4):
                 issues.append(Issue("WARNING", "UV_RANGE", "UVs outside the 0-1 range are not baked", obj, pair))
-            islands = uv_island_ids(mesh, layer)
-            pix, isl = rasterize_uv_islands(mesh, layer, islands)
-            ratio = overlap_ratio(pix, isl)
+            # A pixel inside two triangles means stacked, mirrored or folded UVs.
+            pix, tri = rasterize_uv(mesh, layer)
+            ratio = overlap_ratio(pix, tri)
             if ratio > 0.002:
                 issues.append(Issue("WARNING", "UV_OVERLAP", ("Overlapping UV islands (%.1f%% of the UV area). "
                                     "Stacked/mirrored islands are baked once", ratio * 100.0),
@@ -383,10 +333,9 @@ def _cross_object_overlap(lows, depsgraph, uv_map):
             if layer is None or len(mesh.polygons) == 0:
                 continue
             # one id per object: only overlaps *between* objects matter here
-            ids = np.zeros(len(mesh.polygons), np.int64) + offset
-            pix, isl = rasterize_uv_islands(mesh, layer, ids)
+            pix, _ = rasterize_uv(mesh, layer)
             pixels.append(pix)
-            islands.append(isl)
+            islands.append(np.full(len(pix), offset, np.int64))
             offset += 1
         finally:
             ev.to_mesh_clear()

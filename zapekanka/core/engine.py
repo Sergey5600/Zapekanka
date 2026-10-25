@@ -199,9 +199,21 @@ class Engine:
         w, h = self.settings["resolution"]
         nx, ny = tiles
         tw, th = w * ss // nx, h * ss // ny
-        # Tiles overlap by the margin so Blender's margin filling sees the
-        # neighbouring islands; the overlap is cropped away after baking.
-        pad = 0 if nx * ny == 1 else int(self.settings["margin"]) * ss + 2
+        tiled = nx * ny > 1
+        margin = int(self.settings["margin"])
+        max_tile = int(self.settings.get("max_tile", 8192))
+        margin_type = self.settings.get("margin_type", "ADJACENT_FACES")
+        # Adjacent-faces padding copies pixels from the face across a UV seam,
+        # which is usually in another tile.  Tiles are then baked without
+        # padding and the padding comes from one extra bake at output size.
+        separate_margin = tiled and margin > 0 and margin_type == "ADJACENT_FACES" and max(w, h) <= max_tile
+        if tiled and margin > 0 and margin_type == "ADJACENT_FACES" and not separate_margin:
+            sess.warn("%s: output is larger than the tile size, padding uses 'Extend' instead of "
+                      "'Adjacent Faces'", name)
+            margin_type = "EXTEND"
+        # Tiles overlap so 'Extend' padding sees islands of neighbouring tiles;
+        # the overlap is cropped away after baking.
+        pad = 0 if not tiled else (2 if separate_margin else margin * ss + 2)
         self.log("Texture set %s: %dx%d, supersample %dx, %d tile(s) of %dx%d, passes: %s"
                  % (name, w, h, ss, nx * ny, tw, th, ", ".join(passes)))
         image = bpy.data.images.new("ZB_Target_" + name, tw + 2 * pad, th + 2 * pad, alpha=True, float_buffer=True)
@@ -217,6 +229,7 @@ class Engine:
             "enc_lo": enc_lo, "enc_size": enc_size,
             "buffer": np.empty((tw + 2 * pad) * (th + 2 * pad) * 4, np.float32),
             "tiles": tiles, "tile_size": (tw, th), "pad": pad,
+            "separate_margin": separate_margin, "margin_type": margin_type, "margin_image": None,
         }
         uv_layer = low.data.uv_layers[UV_NAME]
         uv_orig = np.empty(len(low.data.loops) * 2, np.float32)
@@ -350,11 +363,13 @@ class Engine:
             raise ValueError(pass_id)
 
         margin = int(self.settings["margin"]) * self.settings["supersample"]
+        if not info.get("margin", True) or ctx["separate_margin"]:
+            margin = 0
         params = {
             "type": info["type"],
             "pass_filter": set(),
-            "margin": 0 if not info.get("margin", True) else margin,
-            "margin_type": self.settings.get("margin_type", "ADJACENT_FACES"),
+            "margin": margin,
+            "margin_type": ctx["margin_type"],
             "use_selected_to_active": not info.get("self", False),
             "max_ray_distance": float(sess.ray_distance[name]),
             "cage_extrusion": 0.0,
@@ -453,7 +468,39 @@ class Engine:
                 out[j * oh:(j + 1) * oh, i * ow:(i + 1) * ow] = data
                 wout[j * oh:(j + 1) * oh, i * ow:(i + 1) * ow] = weight
                 self.progress(label, advance=1)
+        if ctx["separate_margin"] and PASSES[pass_id].get("margin", True):
+            uv_layer.data.foreach_set("uv", uv_orig)
+            self._bake_margin(ctx, params, selected, out, wout)
         return out, wout
+
+    def _bake_margin(self, ctx, params, selected, out, wout):
+        """Fill the padding of a tiled pass from a bake at output resolution."""
+        w, h = self.settings["resolution"]
+        low = ctx["low"]
+        img = ctx["margin_image"]
+        if img is None:
+            img = bpy.data.images.new("ZB_Margin_" + ctx["name"], w, h, alpha=True, float_buffer=True)
+            self.session.reg.images.append(img)
+            compat.set_colorspace(img, "data")
+            ctx["margin_image"] = img
+        node = low.data.materials[0].node_tree.nodes.get("ZB_BakeTarget")
+        previous = node.image
+        node.image = img
+        buf = np.zeros(w * h * 4, np.float32)
+        img.pixels.foreach_set(buf)
+        margin_params = dict(params, margin=int(self.settings["margin"]))
+        try:
+            with scene_context(self.session.scene, low, selected):
+                res = bpy.ops.object.bake(**margin_params)
+        finally:
+            node.image = previous
+        if "FINISHED" not in res:
+            raise RuntimeError("Padding bake failed for %s" % ctx["name"])
+        img.pixels.foreach_get(buf)
+        full = buf.reshape(h, w, 4)
+        fill = (wout <= 0) & (full[..., 3] > 0)
+        out[fill] = full[..., :3][fill]
+        wout[fill] = 1.0
 
     # ---------------------------------------------------------------- maps
 

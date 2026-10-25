@@ -32,6 +32,7 @@ _UE_SUFFIX = {
 
 PRESETS = {
     "UE5": {
+        "description": "DirectX normals, ORM packing, T_Name_Suffix naming",
         "label": "Unreal Engine 5",
         "normal_format": "DIRECTX",
         "template": "T_{name}_{suffix}",
@@ -44,6 +45,7 @@ PRESETS = {
         "suffix": _UE_SUFFIX,
     },
     "UNITY_URP": {
+        "description": "OpenGL normals, metallic + smoothness in alpha",
         "label": "Unity (URP / Built-in)",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -59,6 +61,7 @@ PRESETS = {
                        position="Position", world_normal="WorldNormal", id="ID", orm="ORM", mask="MaskMap"),
     },
     "UNITY_HDRP": {
+        "description": "OpenGL normals, HDRP mask map",
         "label": "Unity (HDRP)",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -74,6 +77,7 @@ PRESETS = {
                        world_normal="WorldNormal", id="ID", orm="ORM", metallic_smoothness="MetallicSmoothness"),
     },
     "GODOT": {
+        "description": "OpenGL normals, ORM packing",
         "label": "Godot 4",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -89,6 +93,7 @@ PRESETS = {
             thickness="thickness", position="position", world_normal="world_normal", id="id").items()},
     },
     "ROBLOX": {
+        "description": "OpenGL normals, separate maps up to 1024px",
         "label": "Roblox",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -105,6 +110,7 @@ PRESETS = {
                        world_normal="WorldNormal", id="ID"),
     },
     "GLTF": {
+        "description": "OpenGL normals, glTF occlusion-roughness-metallic packing",
         "label": "glTF / Sketchfab",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -120,6 +126,7 @@ PRESETS = {
                        position="position", world_normal="worldNormal", id="id"),
     },
     "SUBSTANCE": {
+        "description": "Mesh maps named for Substance 3D Painter, 16-bit normals",
         "label": "Substance 3D Painter",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -135,6 +142,7 @@ PRESETS = {
                        metallic="metallic", emission="emissive", opacity="opacity"),
     },
     "MARMOSET": {
+        "description": "Mesh maps named for Marmoset Toolbag, 16-bit normals",
         "label": "Marmoset Toolbag",
         "normal_format": "OPENGL",
         "template": "{name}_{suffix}",
@@ -151,7 +159,7 @@ PRESETS = {
     },
 }
 
-PRESET_ITEMS = [(key, p["label"], "Settings for %s" % p["label"]) for key, p in PRESETS.items()] + [
+PRESET_ITEMS = [(key, p["label"], p["description"]) for key, p in PRESETS.items()] + [
     ("CUSTOM", "Custom", "Keep the current naming and packing settings")
 ]
 

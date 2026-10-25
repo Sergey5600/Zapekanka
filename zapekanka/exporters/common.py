@@ -157,8 +157,10 @@ def export_objects(context, groups, triangulate=False):
     context.scene.collection.children.link(coll)
     created = []
     meshes = []
-    try:
-        with _free_names([g["name"] for g in groups]):
+    with _free_names([g["name"] for g in groups]):
+        # Temporary objects must be gone before the user's names are restored,
+        # otherwise the user's objects would come back as "Name.001".
+        try:
             for g in groups:
                 pivot = g.get("pivot")
                 world = pivot.matrix_world.copy() if pivot is not None else Matrix()
@@ -178,13 +180,13 @@ def export_objects(context, groups, triangulate=False):
                 coll.objects.link(obj)
                 created.append(obj)
             yield created
-    finally:
-        for obj in created:
-            bpy.data.objects.remove(obj, do_unlink=True)
-        for mesh in meshes:
-            if mesh.users == 0:
-                bpy.data.meshes.remove(mesh)
-        bpy.data.collections.remove(coll)
+        finally:
+            for obj in created:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            for mesh in meshes:
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            bpy.data.collections.remove(coll)
 
 
 def _join_meshes(parts, name):

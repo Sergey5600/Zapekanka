@@ -157,37 +157,66 @@ def _shift(a, dy, dx):
     return a[ys][:, xs]
 
 
+def _runs_forward(mask, limit):
+    """For each pixel: how many consecutive True pixels follow it along axis 1 (capped)."""
+    h, w = mask.shape
+    xs = np.arange(w, dtype=np.int32)
+    out = np.empty((h, w), np.uint8)
+    for y0 in range(0, h, _CHUNK_ROWS):
+        m = mask[y0:y0 + _CHUNK_ROWS]
+        idx = np.where(m, np.int32(w), xs[None, :])
+        nxt = np.minimum.accumulate(idx[:, ::-1], axis=1)[:, ::-1]
+        out[y0:y0 + _CHUNK_ROWS] = np.clip(nxt - xs[None, :] - 1, 0, limit)
+    return out
+
+
+def _runs(mask, limit):
+    """Run lengths inside ``mask`` towards +x, -x, +y and -y."""
+    limit = min(int(limit), 255)
+    right = _runs_forward(mask, limit)
+    left = _runs_forward(mask[:, ::-1], limit)[:, ::-1]
+    up = np.ascontiguousarray(_runs_forward(np.ascontiguousarray(mask.T), limit).T)
+    down = np.ascontiguousarray(_runs_forward(np.ascontiguousarray(mask.T[:, ::-1]), limit)[:, ::-1].T)
+    return right, left, up, down
+
+
 def curvature_from_normal(normal_rgb, strength=1.0, radius=1.0, mask=None):
     """Edge curvature from an OpenGL tangent-space normal map.
 
     Convex edges become brighter than 0.5, concave ones darker.  ``radius`` is
     expressed in pixels at 1024px and scaled with resolution.  When ``mask``
-    (UV island coverage) is given, samples outside the islands are replaced by
-    the centre pixel: tangent space is discontinuous across UV seams, so
-    differences across a seam would show up as false dark/bright lines.
+    (UV island coverage) is given, a sample is only used if the straight path
+    to it stays inside the island: tangent space is discontinuous across UV
+    seams, so differences across a seam would show up as false lines.
     """
     h, w, _ = normal_rgb.shape
     nx = normal_rgb[..., 0] * 2.0 - 1.0
     ny = normal_rgb[..., 1] * 2.0 - 1.0
-    if mask is None:
-        mask = np.ones((h, w), bool)
-    mask = mask.astype(bool, copy=False)
     res_scale = max(h, w) / 1024.0
     scale = max(1.0, res_scale) * max(radius, 0.1)
     # Slopes are per pixel; multiplying by a resolution-relative reference
     # width keeps the look identical at 1K, 2K, 4K...
     reference = 8.0 * res_scale
+    radii = [max(1, int(round(mult * scale))) for mult in (1.0, 2.0, 4.0)]
+    if mask is None:
+        runs = None
+    else:
+        runs = _runs(mask.astype(bool, copy=False), max(radii))
 
-    def sample(a, dy, dx):
+    def sample(a, dy, dx, run):
         shifted = _shift(a, dy, dx)
-        inside = _shift(mask, dy, dx)
-        return np.where(inside, shifted, a)
+        if runs is None:
+            return shifted
+        return np.where(run >= max(abs(dy), abs(dx)), shifted, a)
 
     curv = np.zeros((h, w), np.float32)
-    for mult, weight in ((1.0, 0.5), (2.0, 0.3), (4.0, 0.2)):
-        r = max(1, int(round(mult * scale)))
-        dnx = sample(nx, 0, -r) - sample(nx, 0, r)
-        dny = sample(ny, -r, 0) - sample(ny, r, 0)
+    for r, weight in zip(radii, (0.5, 0.3, 0.2)):
+        if runs is None:
+            right = left = up = down = None
+        else:
+            right, left, up, down = runs
+        dnx = sample(nx, 0, -r, right) - sample(nx, 0, r, left)
+        dny = sample(ny, -r, 0, up) - sample(ny, r, 0, down)
         curv += weight * (dnx + dny) / (2.0 * r)
     curv *= reference
     return np.clip(0.5 + 0.5 * strength * curv, 0.0, 1.0)[..., None].astype(np.float32)
