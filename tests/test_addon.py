@@ -187,6 +187,33 @@ class PreflightTest(AddonTestCase):
         self.assertGreater(len(pix), 0.3 * 256 * 256)
 
 
+class CageTest(AddonTestCase):
+    def test_preview_follows_extrusion(self):
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        self.s.cage_extrusion = 0.1
+        self.s.show_cage_preview = True
+        preview = bpy.data.objects["ZB_CagePreview_Box_low"]
+        xs = [v.co.x for v in preview.data.vertices]
+        self.assertAlmostEqual(max(xs), 1.1, places=4)
+        self.s.cage_extrusion = 0.2
+        preview = bpy.data.objects["ZB_CagePreview_Box_low"]
+        self.assertAlmostEqual(max(v.co.x for v in preview.data.vertices), 1.2, places=4)
+        self.s.show_cage_preview = False
+        self.assertNotIn("ZB_CagePreview_Box_low", bpy.data.objects)
+        self.assertNotIn("Zapekanka Cage Preview", bpy.data.collections)
+
+    def test_estimate_extrusion(self):
+        scenes.cube("Box_low")
+        scenes.cube("Box_high", 2.3)
+        bpy.ops.zapekanka.detect_pairs()
+        bpy.ops.zapekanka.cage_estimate(target="GLOBAL")
+        self.assertGreaterEqual(self.s.cage_extrusion, 0.15)
+        self.assertLess(self.s.cage_extrusion, 0.5)
+        bpy.ops.zapekanka.cage_estimate(target="ACTIVE")
+        self.assertTrue(self.s.pairs[0].use_custom_extrusion)
+
+
 class BakeOperatorTest(AddonTestCase):
     def test_foreground_bake_assigns_material_and_restores(self):
         low, high = scenes.box_pair()

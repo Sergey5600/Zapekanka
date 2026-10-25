@@ -289,7 +289,7 @@ def _tick():
     if changed:
         _redraw()
     if _current is None and not _pending:
-        return 1.0
+        return None  # idle: unregister, submit() registers the timer again
     return 0.25
 
 

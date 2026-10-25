@@ -32,30 +32,15 @@ from . import background, operators, prefs, props, translations, ui
 _classes = prefs.classes + props.classes + operators.classes + ui.classes
 
 
-@bpy.app.handlers.persistent
-def _on_load_pre(*_args):
-    # A cage preview belongs to the file that created it.
-    from .operators import cage
-
-    try:
-        cage.clear_previews()
-    except (ReferenceError, RuntimeError):
-        pass
-
-
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
     props.register()
     translations.register()
-    if _on_load_pre not in bpy.app.handlers.load_pre:
-        bpy.app.handlers.load_pre.append(_on_load_pre)
 
 
 def unregister():
     background.shutdown()
-    if _on_load_pre in bpy.app.handlers.load_pre:
-        bpy.app.handlers.load_pre.remove(_on_load_pre)
     translations.unregister()
     props.unregister()
     for cls in reversed(_classes):

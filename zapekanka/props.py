@@ -24,11 +24,10 @@ def _mesh_poll(self, obj):
 
 
 def _cage_changed(self, context):
-    settings = context.scene.zapekanka
-    if settings.show_cage_preview:
-        from .operators import cage as cage_ops
+    # Rebuilds the preview when it is shown and removes it when it was switched off.
+    from .operators import cage as cage_ops
 
-        cage_ops.refresh_previews(context)
+    cage_ops.refresh_previews(context)
 
 
 def _preset_changed(self, context):
