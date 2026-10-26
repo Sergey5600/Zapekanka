@@ -129,6 +129,17 @@ class PreflightTest(AddonTestCase):
             self.assertNotIn((code, "Box_low"), codes)
         self.assertEqual(tuple(low.scale), (1.0, 1.0, 1.0))
 
+    def test_selection_without_pairs(self):
+        tower = scenes.cube("ElecLaneBig")
+        for obj in bpy.context.scene.objects:
+            obj.select_set(obj is tower)
+        codes = self.codes()
+        self.assertIn(("SELECTION", ""), codes)
+        self.assertIn(("NO_UV", "ElecLaneBig"), codes, "selected objects are checked like a pair")
+        self.assertNotIn(("NO_PAIRS", ""), codes)
+        tower.select_set(False)
+        self.assertIn(("NO_PAIRS", ""), self.codes())
+
     def test_uv_overlap(self):
         low = scenes.cube("Box_low")
         scenes.unwrap(low)

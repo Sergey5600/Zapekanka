@@ -362,8 +362,10 @@ RU = {
     "Timeout (s)": "Таймаут (с)",
 
     # Pre-flight messages
-    "No enabled pairs. Use 'Detect Pairs' or add one from selection":
-        "Нет включённых пар. Нажмите «Найти пары» или создайте пару из выделения",
+    "Nothing to bake. Name objects Name_low / Name_high and press Detect Pairs, or select the objects to bake":
+        "Нечего запекать. Назовите объекты Имя_low / Имя_high и нажмите «Найти пары» или выделите объекты",
+    "No pairs: the selected objects will be baked with their own materials":
+        "Пар нет: выделенные объекты будут запечены со своими материалами",
     "Output folder is relative but the file is not saved. Save the .blend or choose an absolute folder":
         "Папка вывода относительная, а файл не сохранён. Сохраните .blend или укажите абсолютный путь",
     "Output folder is not writable: %s": "Нет прав на запись в папку: %s",
