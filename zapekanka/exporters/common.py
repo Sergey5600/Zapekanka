@@ -11,6 +11,7 @@ import shutil
 from contextlib import contextmanager
 
 import bpy
+import numpy as np
 from mathutils import Matrix
 
 from .. import materials
@@ -126,11 +127,27 @@ def _free_names(names):
                 pass
 
 
+_NORMAL_ATTR = "zb_export_normal"
+
+
 def _evaluated_copy(obj, depsgraph, to_space, triangulate):
     ev = obj.evaluated_get(depsgraph)
     mesh = bpy.data.meshes.new_from_object(ev, preserve_all_data_layers=True, depsgraph=depsgraph)
-    mesh.transform(to_space @ obj.matrix_world)
-    if (to_space @ obj.matrix_world).to_3x3().determinant() < 0:
+    matrix = to_space @ obj.matrix_world
+    custom = mesh.has_custom_normals and len(mesh.loops) > 0
+    if custom:
+        # Custom normals ride along as a corner attribute through the transform,
+        # the winding flip and the triangulation, and are written back at the end:
+        # triangulating would otherwise bend them and break the baked shading.
+        normals = np.empty(len(mesh.loops) * 3, np.float32)
+        mesh.corner_normals.foreach_get("vector", normals)
+        normal_matrix = np.array(matrix.to_3x3().inverted_safe().transposed(), np.float32)
+        normals = normals.reshape(-1, 3) @ normal_matrix.T
+        normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
+        attr = mesh.attributes.new(_NORMAL_ATTR, "FLOAT_VECTOR", "CORNER")
+        attr.data.foreach_set("vector", normals.ravel())
+    mesh.transform(matrix)
+    if matrix.to_3x3().determinant() < 0:
         mesh.flip_normals()
     if triangulate:
         import bmesh
@@ -140,6 +157,12 @@ def _evaluated_copy(obj, depsgraph, to_space, triangulate):
         bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method="BEAUTY", ngon_method="BEAUTY")
         bm.to_mesh(mesh)
         bm.free()
+    if custom:
+        attr = mesh.attributes[_NORMAL_ATTR]
+        normals = np.empty(len(mesh.loops) * 3, np.float32)
+        attr.data.foreach_get("vector", normals)
+        mesh.attributes.remove(attr)
+        mesh.normals_split_custom_set(normals.reshape(-1, 3))
     return mesh
 
 

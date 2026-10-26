@@ -129,6 +129,17 @@ class PreflightTest(AddonTestCase):
             self.assertNotIn((code, "Box_low"), codes)
         self.assertEqual(tuple(low.scale), (1.0, 1.0, 1.0))
 
+    def test_selection_without_pairs(self):
+        tower = scenes.cube("ElecLaneBig")
+        for obj in bpy.context.scene.objects:
+            obj.select_set(obj is tower)
+        codes = self.codes()
+        self.assertIn(("SELECTION", ""), codes)
+        self.assertIn(("NO_UV", "ElecLaneBig"), codes, "selected objects are checked like a pair")
+        self.assertNotIn(("NO_PAIRS", ""), codes)
+        tower.select_set(False)
+        self.assertIn(("NO_PAIRS", ""), self.codes())
+
     def test_uv_overlap(self):
         low = scenes.cube("Box_low")
         scenes.unwrap(low)
@@ -418,6 +429,56 @@ class ExportTest(AddonTestCase):
         # exporters may create the baked material/images once; nothing else
         for key in ("objects", "meshes", "scenes", "collections"):
             self.assertEqual(after[key], before[key], key)
+
+
+class ExportNormalsTest(unittest.TestCase):
+    """Exported meshes keep the custom normals the bake was made with."""
+
+    def setUp(self):
+        scenes.reset()
+
+    @staticmethod
+    def _corner_map(mesh, matrix):
+        import numpy as np
+
+        nmat = matrix.to_3x3().inverted_safe().transposed()
+        out = {}
+        for poly in mesh.polygons:
+            fn = tuple(np.round((nmat @ poly.normal).normalized(), 2))
+            for li in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                co = tuple(np.round(matrix @ mesh.vertices[mesh.loops[li].vertex_index].co, 3))
+                out[(co, fn)] = (nmat @ mesh.corner_normals[li].vector).normalized()
+        return out
+
+    def _check(self, scale, triangulate):
+        from mathutils import Matrix, Vector
+
+        from zapekanka.exporters import common
+
+        obj = scenes.cube("Box")
+        obj.scale = scale
+        mesh = obj.data
+        normals = []
+        for poly in mesh.polygons:
+            for _ in range(poly.loop_total):
+                normals.append(tuple((Vector(poly.normal) + Vector((0, 0, 0.7))).normalized()))
+        mesh.normals_split_custom_set(normals)
+        bpy.context.view_layer.update()
+        expected = self._corner_map(mesh, obj.matrix_world)
+        with common.export_objects(bpy.context, [{"name": "X", "objects": [obj]}], triangulate) as objs:
+            got = self._corner_map(objs[0].data, Matrix())
+        matched = [k for k in expected if k in got]
+        self.assertEqual(len(matched), len(expected))
+        worst = max((got[k] - expected[k]).length for k in matched)
+        self.assertLess(worst, 1e-3, "custom normals changed on export (scale %s, triangulate %s)" % (scale, triangulate))
+
+    def test_triangulate_keeps_custom_normals(self):
+        self._check((1.0, 1.0, 1.0), True)
+
+    def test_mirrored_object_keeps_custom_normals(self):
+        self._check((-1.0, 1.0, 1.0), True)
+        scenes.reset()
+        self._check((-1.0, 1.0, 1.0), False)
 
 
 class UnrealRemoteTest(unittest.TestCase):

@@ -142,13 +142,37 @@ def signed_volume(bm):
 # Checks
 
 
+class _SelectionPair:
+    """Stands in for the pair Bake All creates for a selected object."""
+
+    def __init__(self, obj):
+        self.name = obj.name
+        self.set_name = obj.name
+        self.cage = None
+        self.use_custom_extrusion = False
+        self._obj = obj
+
+    def low_objects(self):
+        return [self._obj]
+
+    def high_objects(self):
+        return []
+
+
 def run_checks(context):
     s = context.scene.zapekanka
     depsgraph = context.evaluated_depsgraph_get()
     issues = []
     pairs = [p for p in s.pairs if p.enabled]
+    if not pairs and not s.pairs:
+        # Bake All falls back to the selection; check what it would bake.
+        pairs = [_SelectionPair(o) for o in context.selected_objects if o.type == "MESH" and not o.get("zb_preview")]
+        if pairs:
+            issues.append(Issue("INFO", "SELECTION", "No pairs: the selected objects will be baked with their own "
+                                                     "materials"))
     if not pairs:
-        issues.append(Issue("ERROR", "NO_PAIRS", "No enabled pairs. Use 'Detect Pairs' or add one from selection"))
+        issues.append(Issue("ERROR", "NO_PAIRS", "Nothing to bake. Name objects Name_low / Name_high and press "
+                                                 "Detect Pairs, or select the objects to bake"))
         return issues
 
     out_dir = s.output_dir
