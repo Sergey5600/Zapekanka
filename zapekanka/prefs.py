@@ -2,7 +2,7 @@
 """Add-on preferences."""
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 ADDON_ID = __package__
 
@@ -47,6 +47,17 @@ class ZB_Preferences(bpy.types.AddonPreferences):
         ),
         default="8192",
     )
+    memory_limit: FloatProperty(
+        name="Bake Memory Limit",
+        description="Most memory (GB) the bake process may use for one tile. Lower it when Unreal or other "
+        "heavy programs run at the same time. Bakes are split into smaller tiles to stay below it",
+        default=4.0,
+        min=0.5,
+        soft_max=32.0,
+        max=256.0,
+        precision=1,
+        unit="NONE",
+    )
     substance_path: StringProperty(
         name="Substance 3D Painter",
         description="Executable used by 'Open in Substance Painter'",
@@ -82,6 +93,7 @@ class ZB_Preferences(bpy.types.AddonPreferences):
         row = box.row()
         row.prop(self, "low_priority")
         row.prop(self, "keep_job_files")
+        box.prop(self, "memory_limit", text="Bake Memory Limit (GB)")
         box.prop(self, "max_tile")
         box = col.box()
         box.label(text="External Applications", icon="EXPORT")

@@ -13,6 +13,7 @@ DEFAULT_SETTINGS = {
     "resolution": [2048, 2048],
     "supersample": 1,
     "max_tile": 8192,
+    "memory_limit_gb": 0.0,  # 0 = only limited by free memory
     "aa_samples": 4,
     "device": "CPU",
     "gpu_backend": "NONE",
