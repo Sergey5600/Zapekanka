@@ -86,6 +86,14 @@ class ZB_Pair(bpy.types.PropertyGroup):
         return [r.obj for r in self.highs if r.obj is not None]
 
 
+class ZB_TexelResult(bpy.types.PropertyGroup):
+    name: StringProperty()
+    valid: BoolProperty(default=False)
+    average: FloatProperty()
+    low: FloatProperty()
+    high: FloatProperty()
+
+
 class ZB_Issue(bpy.types.PropertyGroup):
     severity: EnumProperty(
         items=(
@@ -328,6 +336,25 @@ class ZB_Settings(bpy.types.PropertyGroup):
     preflight_ran: BoolProperty(default=False)
     show_cage_preview: BoolProperty(name="Show Cage", default=False, update=_cage_changed)
 
+    texel_target: FloatProperty(
+        name="Target Density",
+        description="Texture pixels per meter every asset should have (e.g. 512 third person, 1024 first person)",
+        default=512.0,
+        min=1.0,
+        soft_max=4096.0,
+        precision=0,
+    )
+    texel_tolerance: FloatProperty(
+        name="Tolerance",
+        description="Deviation from the target that is still fine",
+        default=10.0,
+        min=0.0,
+        max=100.0,
+        subtype="PERCENTAGE",
+        precision=0,
+    )
+    texel_results: CollectionProperty(type=ZB_TexelResult)
+
     maps: PointerProperty(type=ZB_MapSettings)
     export: PointerProperty(type=ZB_ExportSettings)
 
@@ -338,7 +365,7 @@ class ZB_Settings(bpy.types.PropertyGroup):
         return value, value
 
 
-classes = (ZB_ObjectRef, ZB_Pair, ZB_Issue, ZB_MapSettings, ZB_ExportSettings, ZB_Settings)
+classes = (ZB_ObjectRef, ZB_Pair, ZB_TexelResult, ZB_Issue, ZB_MapSettings, ZB_ExportSettings, ZB_Settings)
 
 
 def register():

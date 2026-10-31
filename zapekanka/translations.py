@@ -430,7 +430,27 @@ RU = {
     "Cage %s does not match the topology of its low poly; using the automatic cage":
         "Каж %s не совпадает по топологии с low; используется автоматический",
 
-    # Presets
+    # Texel density
+    "Texel Density": "Плотность текселей",
+    "Measure": "Измерить",
+    "Measure the texel density (texture pixels per meter) of the low polys at the bake resolution":
+        "Измерить плотность текселей (пикселей текстуры на метр) low-мешей при разрешении запекания",
+    "Set UV to Target": "UV под цель",
+    "Scale the UVs of the selected meshes so they reach the target texel density at the bake resolution (pack the "
+    "islands afterwards if they leave the 0-1 square)":
+        "Масштабировать UV выделенных мешей под целевую плотность при разрешении запекания (если острова выйдут "
+        "за квадрат 0–1, упакуйте их)",
+    "Target Density": "Целевая плотность",
+    "Texture pixels per meter every asset should have (e.g. 512 third person, 1024 first person)":
+        "Сколько пикселей текстуры на метр должно быть у каждого ассета (например, 512 от третьего лица, 1024 от "
+        "первого)",
+    "Tolerance": "Допуск",
+    "Deviation from the target that is still fine": "Допустимое отклонение от цели",
+    "Target (px/m)": "Цель (пикс/м)",
+    "±": "±",
+    "%s: no UVs or no faces": "%s: нет UV или граней",
+    "    or bake at %d px": "    или печь в %d px",
+    "At %dx%d. Range: 5%%–95%% of the surface": "При %dx%d. Разброс: 5%%–95%% поверхности",
     "Mask Map": "Mask Map",
     "Metallic Smoothness": "Metallic Smoothness",
     "ORM": "ORM",

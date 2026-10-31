@@ -362,6 +362,44 @@ class ZB_PT_naming(_Panel, bpy.types.Panel):
 # Pre-flight
 
 
+class ZB_PT_texel(_Panel, bpy.types.Panel):
+    bl_idname = "ZB_PT_texel"
+    bl_label = "Texel Density"
+    bl_parent_id = "ZB_PT_main"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        from . import texel
+
+        layout = self.layout
+        s = context.scene.zapekanka
+        row = layout.row(align=True)
+        row.prop(s, "texel_target", text="Target (px/m)")
+        row.prop(s, "texel_tolerance", text="±")
+        row = layout.row(align=True)
+        row.operator("zapekanka.texel_measure", icon="DRIVER_DISTANCE")
+        row.operator("zapekanka.texel_apply", icon="UV")
+        if not s.texel_results:
+            return
+        w, h = s.resolution_xy()
+        resolution = (w * h) ** 0.5
+        tol = s.texel_tolerance / 100.0
+        box = layout.box()
+        col = box.column(align=True)
+        for item in s.texel_results:
+            if not item.valid:
+                col.label(text=iface_("%s: no UVs or no faces") % item.name, icon="ERROR", translate=False)
+                continue
+            ok = abs(item.average - s.texel_target) <= tol * s.texel_target
+            col.label(text="%s: %.0f px/m  (%.0f–%.0f)" % (item.name, item.average, item.low, item.high),
+                      icon="CHECKMARK" if ok else "ERROR", translate=False)
+            if not ok:
+                size = texel.resolution_for(s.texel_target, item.average, resolution)
+                if size:
+                    col.label(text=iface_("    or bake at %d px") % size, translate=False)
+        box.label(text=iface_("At %dx%d. Range: 5%%–95%% of the surface") % (w, h), icon="INFO", translate=False)
+
+
 class ZB_PT_preflight(_Panel, bpy.types.Panel):
     bl_idname = "ZB_PT_preflight"
     bl_label = "Pre-flight Check"
@@ -455,6 +493,7 @@ classes = (
     ZB_PT_cage,
     ZB_PT_output,
     ZB_PT_naming,
+    ZB_PT_texel,
     ZB_PT_preflight,
     ZB_PT_export,
 )
