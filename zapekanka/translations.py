@@ -343,6 +343,12 @@ RU = {
     "Run background bakes with lower process priority so the UI stays responsive":
         "Запускать фоновое запекание с пониженным приоритетом, чтобы интерфейс оставался отзывчивым",
     "Max Tile Size": "Макс. размер тайла",
+    "Bake Memory Limit": "Лимит памяти на запекание",
+    "Bake Memory Limit (GB)": "Лимит памяти на запекание (ГБ)",
+    "Most memory (GB) the bake process may use for one tile. Lower it when Unreal or other heavy programs run at "
+    "the same time. Bakes are split into smaller tiles to stay below it":
+        "Сколько памяти (ГБ) запекание может занять на один тайл. Уменьшите, если параллельно открыт Unreal или "
+        "другие тяжёлые программы. Запекание делится на тайлы поменьше, чтобы уложиться в лимит",
     "Supersampled bakes larger than this are split into tiles to limit memory use":
         "Запекание больше этого размера делится на тайлы, чтобы экономить память",
     "Lowest memory use": "Минимум памяти",

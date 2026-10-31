@@ -123,6 +123,16 @@ class MemoryTileTest(unittest.TestCase):
         self.assertEqual(engine.memory_tile_limit(40 * gib), 8192)
         self.assertEqual(engine.memory_tile_limit(1 * gib), 1024)
 
+    def test_user_limit(self):
+        gib = 1024 ** 3
+        # plenty of free memory, but the user allows only 4 GB / 1 GB
+        self.assertEqual(engine.memory_tile_limit(64 * gib, 4 * gib), 4096)
+        self.assertEqual(engine.memory_tile_limit(64 * gib, 1 * gib), 2048)
+        self.assertEqual(engine.memory_tile_limit(64 * gib, 0.5 * gib), 1024)
+        # free memory is the tighter bound
+        self.assertEqual(engine.memory_tile_limit(4 * gib, 16 * gib), 2048)
+        self.assertEqual(engine.memory_tile_limit(None, 4 * gib), 4096)
+
     def test_available_memory(self):
         free = engine.available_memory()
         self.assertTrue(free is None or free > 0)

@@ -77,6 +77,7 @@ def build_job(context, pairs=None):
         "resolution": [w, h],
         "supersample": int(s.supersample),
         "max_tile": int(prefs.max_tile) if prefs is not None else 8192,
+        "memory_limit_gb": float(prefs.memory_limit) if prefs is not None else 4.0,
         "aa_samples": s.aa_samples,
         "device": _device(context, s),
         "margin": s.margin,

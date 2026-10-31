@@ -125,11 +125,16 @@ def available_memory():
         return None
 
 
-def memory_tile_limit(free_bytes, floor=1024, ceiling=16384):
-    """Largest power-of-two tile side whose bake fits into half of the free memory."""
-    if not free_bytes:
+def memory_tile_limit(free_bytes, limit_bytes=None, floor=1024, ceiling=16384):
+    """Largest power-of-two tile side whose bake fits into the memory budget.
+
+    The budget is half of the free memory, and never more than ``limit_bytes``
+    (the user's limit from the preferences).
+    """
+    budgets = [b for b in (0.5 * free_bytes if free_bytes else None, limit_bytes) if b]
+    if not budgets:
         return ceiling
-    texels = 0.5 * free_bytes / BYTES_PER_TILE_TEXEL
+    texels = min(budgets) / BYTES_PER_TILE_TEXEL
     side = floor
     while side * 2 <= ceiling and (side * 2) ** 2 <= texels:
         side *= 2
@@ -211,10 +216,13 @@ class Engine:
             ss = self.settings["supersample"]
             w, h = self.settings["resolution"]
             max_tile = int(self.settings.get("max_tile", 8192))
-            limit = memory_tile_limit(available_memory())
+            limit_gb = float(self.settings.get("memory_limit_gb") or 0.0)
+            limit = memory_tile_limit(available_memory(), limit_gb * 1024 ** 3 if limit_gb > 0 else None)
             if limit < max_tile:
-                self.log("Free memory limits bake tiles to %dx%d" % (limit, limit))
+                self.log("Memory budget limits bake tiles to %dx%d" % (limit, limit))
                 max_tile = limit
+            # later steps (padding bake) must use the effective tile size
+            self.settings["max_tile"] = max_tile
             nx, ny = tile_plan(w, h, ss, max_tile)
             for ts in self.job["texture_sets"]:
                 highs = self.session.highs[ts["name"]]
