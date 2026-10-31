@@ -431,6 +431,53 @@ class ExportTest(AddonTestCase):
             self.assertEqual(after[key], before[key], key)
 
 
+class TexelDensityTest(AddonTestCase):
+    def _plane(self, name, scale=1.0):
+        import bmesh
+
+        mesh = bpy.data.meshes.new(name)
+        bm = bmesh.new()
+        bm.loops.layers.uv.new("UVMap")
+        bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=0.5, calc_uvs=True)  # 1 x 1 m, UV 0-1
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new(name, mesh)
+        obj.scale = (scale, scale, scale)
+        bpy.context.scene.collection.objects.link(obj)
+        bpy.context.view_layer.update()
+        return obj
+
+    def _select(self, *objs):
+        for o in bpy.context.scene.objects:
+            o.select_set(o in objs)
+        bpy.context.view_layer.objects.active = objs[0]
+
+    def test_measure(self):
+        a = self._plane("A")
+        b = self._plane("B", scale=2.0)
+        self.s.resolution = "1024"
+        self._select(a, b)
+        self.assertEqual(bpy.ops.zapekanka.texel_measure(), {"FINISHED"})
+        res = {r.name: r for r in self.s.texel_results}
+        self.assertAlmostEqual(res["A"].average, 1024.0, delta=1.0)
+        self.assertAlmostEqual(res["B"].average, 512.0, delta=1.0)
+        self.assertAlmostEqual(res["A"].low, res["A"].high, delta=1.0)
+
+    def test_set_uv_to_target(self):
+        a = self._plane("A")
+        self.s.resolution = "1024"
+        self.s.texel_target = 256.0
+        self._select(a)
+        self.assertEqual(bpy.ops.zapekanka.texel_apply(), {"FINISHED"})
+        self.assertAlmostEqual(self.s.texel_results[0].average, 256.0, delta=1.0)
+
+    def test_resolution_suggestion(self):
+        from zapekanka import texel
+
+        self.assertEqual(texel.resolution_for(512, 256, 1024), 2048)
+        self.assertEqual(texel.resolution_for(512, 512, 2048), 2048)
+
+
 class ExportNormalsTest(unittest.TestCase):
     """Exported meshes keep the custom normals the bake was made with."""
 
