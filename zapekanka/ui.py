@@ -7,6 +7,7 @@ import bpy
 from bpy.app.translations import pgettext_iface as iface_
 
 from . import background, pairing
+from .operators import bake as bake_ops
 from .operators.bake import LAST_SUMMARY
 
 CATEGORY = "Zapekanka"
@@ -102,8 +103,11 @@ class ZB_PT_main(_Panel, bpy.types.Panel):
             queued = background.queued_count()
             if queued:
                 row.label(text=iface_("Queued: %d") % queued, translate=False)
-            if state.foreground:
+            if state.foreground and not bake_ops.foreground_is_stale():
                 box.label(text="Press Esc to cancel", icon="EVENT_ESC")
+            elif state.foreground:
+                box.label(text="The bake stopped responding", icon="ERROR")
+                box.operator("zapekanka.cancel", text="Reset", icon="CANCEL")
             else:
                 box.operator("zapekanka.cancel", icon="CANCEL")
         col = layout.column(align=True)
@@ -398,8 +402,12 @@ class ZB_PT_texel(_Panel, bpy.types.Panel):
                       icon="CHECKMARK" if ok else "ERROR", translate=False)
             if not ok:
                 size = texel.resolution_for(s.texel_target, item.average, resolution)
-                if size:
-                    col.label(text=iface_("    or bake at %d px") % size, translate=False)
+                if size and size != round(resolution):
+                    col.label(text=iface_("    or bake at %d px (%.0f px/m)") % (size, item.average * size / resolution),
+                              translate=False)
+            if item.collapsed >= 0.01:
+                col.label(text=iface_("    %.0f%% of the surface has collapsed UVs (no texture detail)")
+                          % (item.collapsed * 100.0), icon="ERROR", translate=False)
         box.label(text=iface_("At %dx%d. Range: 5%%–95%% of the surface") % (w, h), icon="INFO", translate=False)
 
 

@@ -61,7 +61,7 @@ class ZB_OT_texel_measure(bpy.types.Operator):
                 item.valid = False
                 continue
             item.valid = True
-            item.average, item.low, item.high = result
+            item.average, item.low, item.high, item.collapsed = result
         if not s.texel_results:
             self.report({"WARNING"}, "Nothing to measure: detect pairs or select meshes")
             return {"CANCELLED"}
