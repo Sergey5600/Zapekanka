@@ -92,6 +92,7 @@ class ZB_TexelResult(bpy.types.PropertyGroup):
     average: FloatProperty()
     low: FloatProperty()
     high: FloatProperty()
+    collapsed: FloatProperty()
 
 
 class ZB_Issue(bpy.types.PropertyGroup):

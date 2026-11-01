@@ -518,6 +518,44 @@ class TexelDensityTest(AddonTestCase):
 
         self.assertEqual(texel.resolution_for(512, 256, 1024), 2048)
         self.assertEqual(texel.resolution_for(512, 512, 2048), 2048)
+        # too dense: 779 px/m at 2048 -> 1024 gives 389, closer to 512 than 779
+        self.assertEqual(texel.resolution_for(512, 779, 2048), 1024)
+
+    def test_collapsed_uvs(self):
+        a = self._plane("A")
+        # squash the UVs of the plane to a line: no texture space at all
+        for loop in a.data.uv_layers.active.data:
+            loop.uv = (loop.uv[0], 0.5)
+        sub = self._plane("B")
+        self.s.resolution = "1024"
+        self._select(sub)
+        bpy.ops.zapekanka.texel_measure()
+        self.assertLess(self.s.texel_results[0].collapsed, 0.01)
+        self._select(a)
+        bpy.ops.zapekanka.texel_measure()
+        self.assertFalse(self.s.texel_results[0].valid, "a fully collapsed unwrap has no density")
+
+    def test_partly_collapsed_uvs(self):
+        import bmesh
+
+        mesh = bpy.data.meshes.new("Two")
+        bm = bmesh.new()
+        bm.loops.layers.uv.new("UVMap")
+        bmesh.ops.create_grid(bm, x_segments=2, y_segments=1, size=0.5, calc_uvs=True)
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new("Two", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        faces = len(mesh.polygons)
+        self.assertGreater(faces, 1)
+        poly = mesh.polygons[0]
+        uv = mesh.uv_layers.active.data
+        for li in range(poly.loop_start, poly.loop_start + poly.loop_total):
+            uv[li].uv = (0.25, 0.25)  # this face gets no texture space
+        self._select(obj)
+        bpy.ops.zapekanka.texel_measure()
+        expected = poly.area / sum(p.area for p in mesh.polygons)
+        self.assertAlmostEqual(self.s.texel_results[0].collapsed, expected, places=3)
 
 
 class ExportNormalsTest(unittest.TestCase):

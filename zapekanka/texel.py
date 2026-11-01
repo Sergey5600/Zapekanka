@@ -44,10 +44,12 @@ def _weighted_percentile(values, weights, q):
 
 
 def measure(mesh, matrix, uv_layer, resolution, meters_per_unit=1.0):
-    """Return ``(average, low, high)`` px/m or None when nothing can be measured.
+    """Return ``(average, low, high, collapsed)`` or None when nothing can be measured.
 
-    ``low``/``high`` are the 5th and 95th area-weighted percentiles: how even
-    the density is across the object.
+    ``low``/``high`` are the 5th and 95th area-weighted percentiles in px/m:
+    how even the density is across the object.  ``collapsed`` is the share of
+    the surface whose UVs have (almost) no area, e.g. islands squashed to a
+    line: those parts get no texture detail at all.
     """
     world, uv_area = _triangles(mesh, matrix, uv_layer)
     if world is None:
@@ -61,18 +63,19 @@ def measure(mesh, matrix, uv_layer, resolution, meters_per_unit=1.0):
     per_tri = resolution * np.sqrt(uv_area / world)
     low = _weighted_percentile(per_tri, world, 0.05)
     high = _weighted_percentile(per_tri, world, 0.95)
-    return average, low, high
+    collapsed = float(world[per_tri < 0.02 * average].sum() / world.sum())
+    return average, low, high, collapsed
 
 
 def resolution_for(density, current_density, resolution, sizes=(256, 512, 1024, 2048, 4096, 8192)):
-    """Smallest power-of-two texture size that reaches ``density`` with the current UVs."""
+    """Texture size whose density with the current UVs is closest to ``density``.
+
+    Closeness is measured as a ratio (512 vs 389 is closer than 512 vs 779).
+    """
     if current_density <= 0:
         return None
     needed = resolution * density / current_density
-    for size in sizes:
-        if size >= needed * 0.95:
-            return size
-    return sizes[-1]
+    return min(sizes, key=lambda size: abs(math.log(size / needed)))
 
 
 def scale_uvs(mesh, uv_layer, factor):

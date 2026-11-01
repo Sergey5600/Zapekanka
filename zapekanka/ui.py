@@ -398,8 +398,12 @@ class ZB_PT_texel(_Panel, bpy.types.Panel):
                       icon="CHECKMARK" if ok else "ERROR", translate=False)
             if not ok:
                 size = texel.resolution_for(s.texel_target, item.average, resolution)
-                if size:
-                    col.label(text=iface_("    or bake at %d px") % size, translate=False)
+                if size and size != round(resolution):
+                    col.label(text=iface_("    or bake at %d px (%.0f px/m)") % (size, item.average * size / resolution),
+                              translate=False)
+            if item.collapsed >= 0.01:
+                col.label(text=iface_("    %.0f%% of the surface has collapsed UVs (no texture detail)")
+                          % (item.collapsed * 100.0), icon="ERROR", translate=False)
         box.label(text=iface_("At %dx%d. Range: 5%%–95%% of the surface") % (w, h), icon="INFO", translate=False)
 
 

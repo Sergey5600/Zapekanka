@@ -451,7 +451,9 @@ RU = {
     "Target (px/m)": "Цель (пикс/м)",
     "±": "±",
     "%s: no UVs or no faces": "%s: нет UV или граней",
-    "    or bake at %d px": "    или печь в %d px",
+    "    or bake at %d px (%.0f px/m)": "    или печь в %d px (%.0f пикс/м)",
+    "    %.0f%% of the surface has collapsed UVs (no texture detail)":
+        "    %.0f%% поверхности со схлопнутыми UV (без деталей текстуры)",
     "At %dx%d. Range: 5%%–95%% of the surface": "При %dx%d. Разброс: 5%%–95%% поверхности",
     "Mask Map": "Mask Map",
     "Metallic Smoothness": "Metallic Smoothness",
