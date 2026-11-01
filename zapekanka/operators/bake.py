@@ -78,6 +78,24 @@ def apply_results(scene_name, filepath, set_lows, result, uv_map):
 
 # Foreground bake in progress (at most one): the modal operator instance.
 FOREGROUND = {"op": None}
+STEP_INTERVAL = 0.05  # seconds between foreground bake steps
+STALE_AFTER = 3.0  # a live modal bake is called every STEP_INTERVAL; silence this long means it died
+
+
+def foreground_is_stale():
+    """True when a foreground bake is registered but its modal handler stopped running."""
+    op = FOREGROUND["op"]
+    return op is not None and time.monotonic() - getattr(op, "_heartbeat", 0.0) > STALE_AFTER
+
+
+def reset_foreground():
+    """Abort a foreground bake whose modal handler is gone and unlock the UI."""
+    op = FOREGROUND["op"]
+    FOREGROUND["op"] = None
+    if op is not None and getattr(op, "_bake", None) is not None:
+        op._bake.abort()
+    background.STATE.running = False
+    background.STATE.foreground = False
 
 
 class ForegroundBake:
@@ -104,6 +122,15 @@ class ForegroundBake:
 
     def cancel(self):
         self._cancel = True
+
+    def abort(self):
+        """Stop at once and clean up (the engine's ``finally`` removes the bake scene)."""
+        try:
+            self._steps.close()
+        except Exception:  # cleanup must not raise out of the modal handler
+            import traceback
+
+            traceback.print_exc()
 
     def step(self):
         """Run one step. Returns None while baking, the result dict when done."""
@@ -235,7 +262,9 @@ class ZB_OT_bake(bpy.types.Operator):
         FOREGROUND["op"] = self
         wm = context.window_manager
         self._window = window
-        self._timer = wm.event_timer_add(0.05, window=window)
+        self._last_step = 0.0
+        self._heartbeat = time.monotonic()
+        self._timer = wm.event_timer_add(STEP_INTERVAL, window=window)
         wm.modal_handler_add(self)
         window.cursor_modal_set("WAIT")
         return {"RUNNING_MODAL"}
@@ -244,22 +273,43 @@ class ZB_OT_bake(bpy.types.Operator):
         self._bake.cancel()
 
     def modal(self, context, event):
-        if event.type == "ESC" and event.value == "PRESS":
-            self._bake.cancel()
-        if event.type != "TIMER" or event.timer is not self._timer:
-            return {"RUNNING_MODAL"}
-        result = self._bake.step()
-        if result is None:
-            _redraw(context)
-            return {"RUNNING_MODAL"}
-        context.window_manager.event_timer_remove(self._timer)
+        self._heartbeat = time.monotonic()
+        try:
+            if event.type == "ESC" and event.value == "PRESS":
+                self._bake.cancel()
+            # Timer events of other add-ons arrive here too, so the pace is
+            # limited by time: every step is followed by a redraw.
+            if event.type != "TIMER" or time.monotonic() - self._last_step < STEP_INTERVAL:
+                return {"RUNNING_MODAL"}
+            result = self._bake.step()
+            self._last_step = self._heartbeat = time.monotonic()
+            if result is None:
+                _redraw(context)
+                return {"RUNNING_MODAL"}
+        except Exception as exc:  # whatever happens, never leave the bake (and the UI lock) behind
+            import traceback
+
+            traceback.print_exc()
+            self._bake.abort()
+            result = {"ok": False, "errors": [str(exc)], "warnings": [], "texture_sets": []}
+        return self._end_modal(context, result)
+
+    def _end_modal(self, context, result):
+        try:
+            context.window_manager.event_timer_remove(self._timer)
+        except (ReferenceError, ValueError, RuntimeError):
+            pass
         try:
             self._window.cursor_modal_restore()
-        except ReferenceError:
+        except (ReferenceError, RuntimeError):
             pass
         FOREGROUND["op"] = None
-        self._bake.finish(result)
-        _redraw(context)
+        try:
+            self._bake.finish(result)
+        finally:
+            background.STATE.running = False
+            background.STATE.foreground = False
+            _redraw(context)
         return self._report(result)
 
     # ------------------------------------------------------------------ foreground, blocking (scripts)
@@ -325,7 +375,9 @@ class ZB_OT_cancel(bpy.types.Operator):
 
     def execute(self, context):
         background.cancel(all_jobs=True)
-        if FOREGROUND["op"] is not None:
+        if foreground_is_stale():
+            reset_foreground()
+        elif FOREGROUND["op"] is not None:
             FOREGROUND["op"].request_cancel()
         return {"FINISHED"}
 

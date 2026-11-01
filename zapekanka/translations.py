@@ -24,6 +24,8 @@ RU = {
     "Selected": "Выделенные",
     "Editing is locked while baking, Esc cancels": "Во время запекания редактирование заблокировано, Esc — отмена",
     "Press Esc to cancel": "Esc — отменить",
+    "The bake stopped responding": "Запекание перестало отвечать",
+    "Reset": "Сбросить",
     "Baking: %s": "Запекание: %s",
     "Elapsed: %ds": "Прошло: %d с",
     "Queued: %d": "В очереди: %d",

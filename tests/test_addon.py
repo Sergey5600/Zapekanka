@@ -245,6 +245,109 @@ class BakeOperatorTest(AddonTestCase):
         self.assertFalse(background.STATE.running)
         return result, steps
 
+    def _run_modal_operator(self, events_before=(), esc_after=None, limit=500):
+        """Call the real ZB_OT_bake.modal with events that only have the fields of bpy.types.Event."""
+        import types
+
+        from zapekanka import jobbuild
+        from zapekanka.operators import bake as bake_ops
+
+        real_fields = set(bpy.types.Event.bl_rna.properties.keys())
+
+        class StrictEvent:
+            """Like bpy.types.Event: reading a field Blender's events do not have fails."""
+
+            def __init__(self, type_, value="NOTHING"):
+                assert {"type", "value"} <= real_fields
+                object.__setattr__(self, "_data", {"type": type_, "value": value})
+
+            def __getattr__(self, name):
+                if name not in real_fields:
+                    raise AttributeError("'Event' object has no attribute '%s'" % name)
+                return self._data.get(name)
+
+        wm = bpy.context.window_manager
+        window = wm.windows[0]
+        job = jobbuild.build_job(bpy.context)
+        op = types.SimpleNamespace(
+            _bake=bake_ops.ForegroundBake(job, bake_ops._set_lows(job), bpy.context.scene.name, bpy.data.filepath, ""),
+            _timer=wm.event_timer_add(bake_ops.STEP_INTERVAL, window=window),
+            _window=window,
+            _last_step=0.0,
+            report=lambda *args: None,
+        )
+        op._end_modal = lambda context, result: bake_ops.ZB_OT_bake._end_modal(op, context, result)
+        op._report = lambda result: bake_ops.ZB_OT_bake._report(op, result)
+        bake_ops.FOREGROUND["op"] = op
+        for event in events_before:
+            self.assertEqual(bake_ops.ZB_OT_bake.modal(op, bpy.context, StrictEvent(*event)), {"RUNNING_MODAL"})
+        ret = {"RUNNING_MODAL"}
+        steps = 0
+        while ret == {"RUNNING_MODAL"} and steps < limit:
+            if esc_after is not None and steps == esc_after:
+                bake_ops.ZB_OT_bake.modal(op, bpy.context, StrictEvent("ESC", "PRESS"))
+            op._last_step = 0.0  # no need to wait between steps in a test
+            ret = bake_ops.ZB_OT_bake.modal(op, bpy.context, StrictEvent("TIMER"))
+            steps += 1
+        self.assertIsNone(bake_ops.FOREGROUND["op"], "the bake must release the UI lock when it ends")
+        self.assertFalse(background.STATE.running)
+        return ret
+
+    def test_modal_operator_with_real_event_fields(self):
+        low, _ = scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        ret = self._run_modal_operator(events_before=[("MOUSEMOVE",), ("Z", "PRESS")])
+        self.assertEqual(ret, {"FINISHED"})
+        self.assertEqual(low.data.materials[0].name, "M_Box")
+
+    def test_modal_operator_esc(self):
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        before = helpers.datablock_counts()
+        self.assertEqual(self._run_modal_operator(esc_after=2), {"CANCELLED"})
+        self.assertEqual(helpers.datablock_counts(), before)
+
+    def test_modal_operator_error_releases_lock(self):
+        from zapekanka.operators import bake as bake_ops
+
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        original = bake_ops.ForegroundBake.step
+
+        def broken(self):
+            raise RuntimeError("boom")
+
+        bake_ops.ForegroundBake.step = broken
+        try:
+            before = helpers.datablock_counts()
+            self.assertEqual(self._run_modal_operator(), {"CANCELLED"})
+            self.assertEqual(helpers.datablock_counts(), before)
+        finally:
+            bake_ops.ForegroundBake.step = original
+
+    def test_stale_foreground_bake_can_be_reset(self):
+        import types
+
+        from zapekanka import jobbuild
+        from zapekanka.operators import bake as bake_ops
+
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        job = jobbuild.build_job(bpy.context)
+        before = helpers.datablock_counts()
+        dead = types.SimpleNamespace(
+            _bake=bake_ops.ForegroundBake(job, bake_ops._set_lows(job), bpy.context.scene.name, "", ""),
+            _heartbeat=0.0)
+        dead._bake.step()  # the bake scene exists, then the modal handler "dies"
+        bake_ops.FOREGROUND["op"] = dead
+        self.assertTrue(bake_ops.foreground_is_stale())
+        self.assertFalse(bpy.ops.zapekanka.bake.poll(), "Bake All is locked while a bake is registered")
+        bpy.ops.zapekanka.cancel()
+        self.assertIsNone(bake_ops.FOREGROUND["op"])
+        self.assertFalse(background.STATE.running)
+        self.assertEqual(helpers.datablock_counts(), before, "reset must remove the bake scene")
+        self.assertTrue(bpy.ops.zapekanka.bake.poll())
+
     def test_foreground_bake_is_stepped(self):
         low, high = scenes.box_pair()
         bpy.ops.zapekanka.detect_pairs()
