@@ -243,7 +243,7 @@ class ZB_Settings(bpy.types.PropertyGroup):
     bake_mode: EnumProperty(
         name="Mode",
         items=(("BACKGROUND", "Background", "Bake in a separate Blender process: the interface stays responsive"),
-               ("FOREGROUND", "Foreground", "Bake inside this Blender session (blocks the interface)")),
+               ("FOREGROUND", "Foreground", "Bake inside this Blender session: shows progress, Esc cancels, editing is locked until it finishes")),
         default="BACKGROUND",
     )
     margin: IntProperty(name="Padding", description="Island padding in pixels (at output resolution)",

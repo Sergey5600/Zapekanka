@@ -22,7 +22,8 @@ RU = {
     "Bake All": "Запечь всё",
     "Active Pair": "Активная пара",
     "Selected": "Выделенные",
-    "Blender is blocked while baking": "Blender заблокирован на время запекания",
+    "Editing is locked while baking, Esc cancels": "Во время запекания редактирование заблокировано, Esc — отмена",
+    "Press Esc to cancel": "Esc — отменить",
     "Baking: %s": "Запекание: %s",
     "Elapsed: %ds": "Прошло: %d с",
     "Queued: %d": "В очереди: %d",
@@ -156,7 +157,8 @@ RU = {
     "Bake in a separate Blender process: the interface stays responsive":
         "Запекание в отдельном процессе Blender: интерфейс не зависает",
     "Foreground": "В этом окне",
-    "Bake inside this Blender session (blocks the interface)": "Запекание в текущем Blender (интерфейс блокируется)",
+    "Bake inside this Blender session: shows progress, Esc cancels, editing is locked until it finishes":
+        "Запекание в текущем Blender: виден прогресс, Esc — отмена, редактирование заблокировано до конца",
     "Padding": "Паддинг",
     "Island padding in pixels (at output resolution)": "Расширение островов в пикселях (в итоговом разрешении)",
     "Padding Type": "Тип паддинга",

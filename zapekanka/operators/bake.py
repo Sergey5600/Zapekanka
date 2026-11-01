@@ -76,11 +76,85 @@ def apply_results(scene_name, filepath, set_lows, result, uv_map):
             mat.use_fake_user = True
 
 
+# Foreground bake in progress (at most one): the modal operator instance.
+FOREGROUND = {"op": None}
+
+
+class ForegroundBake:
+    """A bake inside the user's Blender, advanced one step (one tile of one pass) at a time."""
+
+    def __init__(self, job, set_lows, scene_name, filepath, uv_map):
+        self._args = (scene_name, filepath, set_lows, uv_map)
+        self._cancel = False
+        self._engine = engine_mod.Engine(job, progress=self._on_progress, log=lambda m: print("Zapekanka:", m),
+                                         check_cancel=lambda: self._cancel)
+        self._steps = self._engine.steps()
+        state = background.STATE
+        state.foreground = True
+        state.running = True
+        state.progress = 0.0
+        state.message = "Preparing"
+        state.title = ", ".join(ts["name"] for ts in job["texture_sets"])
+        state.started = time.time()
+
+    @staticmethod
+    def _on_progress(frac, message):
+        background.STATE.progress = frac
+        background.STATE.message = message
+
+    def cancel(self):
+        self._cancel = True
+
+    def step(self):
+        """Run one step. Returns None while baking, the result dict when done."""
+        try:
+            next(self._steps)
+        except StopIteration as stop:
+            return stop.value
+        except Exception as exc:  # never leave Blender stuck in the modal loop
+            import traceback
+
+            traceback.print_exc()
+            self._steps.close()  # runs the engine's cleanup
+            return {"ok": False, "errors": [str(exc)], "warnings": [], "texture_sets": []}
+        return None
+
+    def finish(self, result):
+        state = background.STATE
+        state.foreground = False
+        state.running = False
+        state.progress = 1.0 if result.get("ok") else state.progress
+        result.setdefault("elapsed", time.time() - state.started)
+        scene_name, filepath, set_lows, uv_map = self._args
+        apply_results(scene_name, filepath, set_lows, result, uv_map)
+
+
+def _event_window(context):
+    """Window that will deliver timer events, or None without an event loop (blender -b, scripts)."""
+    if bpy.app.background:
+        return None
+    return context.window
+
+
+def _redraw(context):
+    wm = context.window_manager
+    for window in wm.windows:
+        screen = window.screen
+        if screen is None:
+            continue
+        for area in screen.areas:
+            if area.type in {"VIEW_3D", "PROPERTIES", "STATUSBAR"}:
+                area.tag_redraw()
+
+
 class ZB_OT_bake(bpy.types.Operator):
     bl_idname = "zapekanka.bake"
     bl_label = "Bake"
     bl_description = "Bake the texture sets"
-    bl_options = {"REGISTER"}
+    # UNDO: the whole bake becomes one undo step, and helper operators used
+    # while baking (join, apply transform) do not push their own steps, which
+    # would copy the entire file into memory each time.
+    bl_options = {"REGISTER", "UNDO"}
 
     scope: EnumProperty(
         name="Scope",
@@ -93,9 +167,30 @@ class ZB_OT_bake(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None and context.mode == "OBJECT"
+        return context.scene is not None and context.mode == "OBJECT" and FOREGROUND["op"] is None
+
+    def invoke(self, context, event):
+        prepared = self._prepare(context)
+        if prepared is None:
+            return {"CANCELLED"}
+        window = _event_window(context)
+        if context.scene.zapekanka.bake_mode == "FOREGROUND" and window is not None:
+            return self._start_modal(context, window, *prepared)
+        return self._dispatch(context, *prepared)
 
     def execute(self, context):
+        prepared = self._prepare(context)
+        if prepared is None:
+            return {"CANCELLED"}
+        return self._dispatch(context, *prepared)
+
+    def _dispatch(self, context, job, set_lows, scene_name, filepath, uv_map):
+        if context.scene.zapekanka.bake_mode == "FOREGROUND":
+            return self._foreground(context, job, set_lows, scene_name, filepath, uv_map)
+        return self._background(context, job, set_lows, scene_name, filepath, uv_map)
+
+    def _prepare(self, context):
+        """Checks and job building shared by all modes. Returns None when cancelled."""
         s = context.scene.zapekanka
         pairing.prune_missing(s, context.scene)
         if not s.pairs:
@@ -113,26 +208,61 @@ class ZB_OT_bake(bpy.types.Operator):
             else:
                 self.report({"ERROR"}, "Nothing to bake. Name objects Name_low / Name_high and press Detect Pairs, "
                                        "or select the objects to bake")
-            return {"CANCELLED"}
+            return None
         if not self.skip_checks:
             issues = preflight.run_checks(context)
             preflight.store_issues(s, issues)
             errors = preflight.blocking_errors(issues)
             if errors:
                 self.report({"ERROR"}, "Pre-flight: %s (see the Pre-flight panel)" % errors[0].message)
-                return {"CANCELLED"}
+                return None
         try:
             job = jobbuild.build_job(context, pairs)
         except (jobbuild.BuildError, OSError, ValueError) as exc:
             self.report({"ERROR"}, str(exc))
-            return {"CANCELLED"}
-        set_lows = _set_lows(job)
-        scene_name = context.scene.name
-        filepath = bpy.data.filepath
-        uv_map = s.uv_map.strip()
-        if s.bake_mode == "FOREGROUND":
-            return self._foreground(context, job, set_lows, scene_name, filepath, uv_map)
-        return self._background(context, job, set_lows, scene_name, filepath, uv_map)
+            return None
+        return job, _set_lows(job), context.scene.name, bpy.data.filepath, s.uv_map.strip()
+
+    # ------------------------------------------------------------------ foreground, interactive
+
+    def _start_modal(self, context, window, job, set_lows, scene_name, filepath, uv_map):
+        """Bake step by step from a timer so Blender keeps redrawing and Esc works.
+
+        Input is swallowed while baking: editing or undoing the scene mid-bake
+        would invalidate the data the bake is working on.
+        """
+        self._bake = ForegroundBake(job, set_lows, scene_name, filepath, uv_map)
+        FOREGROUND["op"] = self
+        wm = context.window_manager
+        self._window = window
+        self._timer = wm.event_timer_add(0.05, window=window)
+        wm.modal_handler_add(self)
+        window.cursor_modal_set("WAIT")
+        return {"RUNNING_MODAL"}
+
+    def request_cancel(self):
+        self._bake.cancel()
+
+    def modal(self, context, event):
+        if event.type == "ESC" and event.value == "PRESS":
+            self._bake.cancel()
+        if event.type != "TIMER" or event.timer is not self._timer:
+            return {"RUNNING_MODAL"}
+        result = self._bake.step()
+        if result is None:
+            _redraw(context)
+            return {"RUNNING_MODAL"}
+        context.window_manager.event_timer_remove(self._timer)
+        try:
+            self._window.cursor_modal_restore()
+        except ReferenceError:
+            pass
+        FOREGROUND["op"] = None
+        self._bake.finish(result)
+        _redraw(context)
+        return self._report(result)
+
+    # ------------------------------------------------------------------ foreground, blocking (scripts)
 
     def _foreground(self, context, job, set_lows, scene_name, filepath, uv_map):
         wm = context.window_manager
@@ -195,6 +325,8 @@ class ZB_OT_cancel(bpy.types.Operator):
 
     def execute(self, context):
         background.cancel(all_jobs=True)
+        if FOREGROUND["op"] is not None:
+            FOREGROUND["op"].request_cancel()
         return {"FINISHED"}
 
 

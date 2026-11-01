@@ -102,7 +102,10 @@ class ZB_PT_main(_Panel, bpy.types.Panel):
             queued = background.queued_count()
             if queued:
                 row.label(text=iface_("Queued: %d") % queued, translate=False)
-            box.operator("zapekanka.cancel", icon="CANCEL")
+            if state.foreground:
+                box.label(text="Press Esc to cancel", icon="EVENT_ESC")
+            else:
+                box.operator("zapekanka.cancel", icon="CANCEL")
         col = layout.column(align=True)
         col.scale_y = 1.6
         op = col.operator("zapekanka.bake", text="Bake All", icon="RENDER_STILL")
@@ -114,7 +117,7 @@ class ZB_PT_main(_Panel, bpy.types.Panel):
         op.scope = "SELECTED"
         layout.row().prop(s, "bake_mode", expand=True)
         if s.bake_mode == "FOREGROUND":
-            layout.label(text="Blender is blocked while baking", icon="INFO")
+            layout.label(text="Editing is locked while baking, Esc cancels", icon="INFO")
 
         if LAST_SUMMARY["lines"] or LAST_SUMMARY["errors"] or LAST_SUMMARY["warnings"]:
             box = layout.box()

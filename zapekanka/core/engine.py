@@ -201,6 +201,21 @@ class Engine:
     # ---------------------------------------------------------------- run
 
     def run(self):
+        """Bake everything and return the result dict."""
+        steps = self.steps()
+        while True:
+            try:
+                next(steps)
+            except StopIteration as stop:
+                return stop.value
+
+    def steps(self):
+        """Generator version of :meth:`run`.
+
+        Yields between bake calls (one pass of one tile), so a caller in the
+        user's Blender can redraw the interface and react to Esc between them.
+        Its return value (``StopIteration.value``) is the result dict.
+        """
         start = time.time()
         result = {"ok": False, "texture_sets": [], "warnings": [], "errors": [], "elapsed": 0.0}
         required = set()
@@ -211,6 +226,7 @@ class Engine:
             self.progress("Preparing bake scene")
             self.session = BakeSession(self.job, log=self.log)
             self.session.setup()
+            yield
             self.writer = imageio.ImageWriter()
             plans = {}
             ss = self.settings["supersample"]
@@ -232,7 +248,7 @@ class Engine:
             self.steps_total = 1 + sum(len(p) * nx * ny + 1 for p in plans.values())
             self.progress("Scene ready", advance=1)
             for ts in self.job["texture_sets"]:
-                info = self.bake_texture_set(ts, plans[ts["name"]], (nx, ny))
+                info = yield from self.bake_texture_set(ts, plans[ts["name"]], (nx, ny))
                 result["texture_sets"].append(info)
             result["ok"] = True
         except BakeCancelled:
@@ -302,7 +318,7 @@ class Engine:
         missed = None
         try:
             for pass_id in passes:
-                data, weight = self.run_pass(ctx, pass_id)
+                data, weight = yield from self.run_pass(ctx, pass_id)
                 if pass_id == "COVER":
                     store.cover = weight > 0
                     continue
@@ -485,6 +501,10 @@ class Engine:
                 hd.set_uniform(group)
 
     def run_pass(self, ctx, pass_id):
+        """Generator: bakes ``pass_id`` tile by tile, yielding before every bake call.
+
+        Returns ``(data, weight)`` at output resolution.
+        """
         w, h = self.settings["resolution"]
         ss = self.settings["supersample"]
         nx, ny = ctx["tiles"]
@@ -508,6 +528,7 @@ class Engine:
                 if nx * ny > 1:
                     label += " (tile %d/%d)" % (j * nx + i + 1, nx * ny)
                 self.progress(label)
+                yield
                 if nx * ny > 1:
                     full = np.array([w * ss, h * ss], np.float64)
                     origin = np.array([i * tw - pad, j * th - pad], np.float64)
@@ -530,6 +551,7 @@ class Engine:
                 wout[j * oh:(j + 1) * oh, i * ow:(i + 1) * ow] = weight
                 self.progress(label, advance=1)
         if ctx["separate_margin"] and PASSES[pass_id].get("margin", True):
+            yield
             uv_layer.data.foreach_set("uv", uv_orig)
             self._bake_margin(ctx, params, selected, out, wout)
         return out, wout

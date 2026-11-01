@@ -226,6 +226,48 @@ class CageTest(AddonTestCase):
 
 
 class BakeOperatorTest(AddonTestCase):
+    def _foreground_bake(self, cancel_after=None, limit=500):
+        """Drive the interactive foreground bake the way its modal operator does on timer events."""
+        from zapekanka import jobbuild
+        from zapekanka.operators import bake as bake_ops
+
+        job = jobbuild.build_job(bpy.context)
+        bake = bake_ops.ForegroundBake(job, bake_ops._set_lows(job), bpy.context.scene.name, bpy.data.filepath, "")
+        self.assertTrue(background.STATE.running and background.STATE.foreground)
+        steps = 0
+        result = None
+        while result is None and steps < limit:
+            if cancel_after is not None and steps == cancel_after:
+                bake.cancel()
+            result = bake.step()
+            steps += 1
+        bake.finish(result)
+        self.assertFalse(background.STATE.running)
+        return result, steps
+
+    def test_foreground_bake_is_stepped(self):
+        low, high = scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        bpy.ops.zapekanka.maps_preset(preset="GAME")
+        before = helpers.datablock_counts()
+        result, steps = self._foreground_bake()
+        self.assertTrue(result["ok"], result)
+        self.assertGreater(steps, 4, "the bake should be split into several steps")
+        self.assertIn("T_Box_BC.png", os.listdir(self.s.output_dir))
+        self.assertEqual(low.data.materials[0].name, "M_Box")
+        after = helpers.datablock_counts()
+        self.assertEqual(after["scenes"], before["scenes"])
+        self.assertEqual(after["objects"], before["objects"])
+
+    def test_foreground_bake_cancel(self):
+        scenes.box_pair()
+        bpy.ops.zapekanka.detect_pairs()
+        before = helpers.datablock_counts()
+        result, _ = self._foreground_bake(cancel_after=2)
+        self.assertFalse(result["ok"])
+        self.assertIn("Cancelled", result["errors"])
+        self.assertEqual(helpers.datablock_counts(), before, "a cancelled bake must leave nothing behind")
+
     def test_foreground_bake_assigns_material_and_restores(self):
         low, high = scenes.box_pair()
         high.data.materials.append(scenes.principled("Red", (0.8, 0.1, 0.1, 1.0)))
