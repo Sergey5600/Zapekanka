@@ -27,6 +27,7 @@ LOG_LINES = 400
 class JobState:
     def __init__(self):
         self.running = False
+        self.foreground = False  # a foreground (modal) bake uses this state too
         self.progress = 0.0
         self.message = ""
         self.title = ""
